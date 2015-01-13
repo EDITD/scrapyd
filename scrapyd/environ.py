@@ -1,3 +1,4 @@
+import datetime
 import os
 
 from zope.interface import implements
@@ -11,6 +12,7 @@ class Environment(object):
     def __init__(self, config, initenv=os.environ):
         self.dbs_dir = config.get('dbs_dir', 'dbs')
         self.logs_dir = config.get('logs_dir', 'logs')
+        self.logs_filename = config.get('logs_filename', '')
         self.items_dir = config.get('items_dir', 'items')
         self.jobs_to_keep = config.getint('jobs_to_keep', 5)
         if config.cp.has_section('settings'):
@@ -29,7 +31,7 @@ class Environment(object):
         if project in self.settings:
             env['SCRAPY_SETTINGS_MODULE'] = self.settings[project]
         if self.logs_dir:
-            env['SCRAPY_LOG_FILE'] = self._get_file(message, self.logs_dir, 'log')
+            env['SCRAPY_LOG_FILE'] = self._get_log_file(message)
         if self.items_dir:
             env['SCRAPY_FEED_URI'] = self._get_file(message, self.items_dir, 'jl')
         return env
@@ -44,3 +46,31 @@ class Environment(object):
         for x in to_delete:
             os.remove(x)
         return os.path.join(logsdir, "%s.%s" % (message['_job'], ext))
+
+    def _get_log_file(self, message):
+        """Combine the logs_dir and logs_filename config items, and substitute
+        any variables in logs_filename to get the full filename of the log file
+        """
+        if not self.logs_filename:
+            # if no filename specified, fall back on the default.
+            return self._get_file(message, self.logs_dir, 'log')
+
+        now = datetime.datetime.now()
+        format_args = {}
+        format_args['project'] = message['_project']
+        format_args['spider'] = message['_spider']
+        format_args['Y'] = now.year
+        format_args['m'] = now.month
+        format_args['d'] = now.day
+        format_args['H'] = now.hour
+        format_args['M'] = now.minute
+        format_args['S'] = now.second
+        filename = self.logs_filename.format(**format_args)
+
+        full_filename = os.path.join(self.logs_dir, filename)
+
+        containing_dir = os.path.dirname(full_filename)
+        if not os.path.exists(containing_dir):
+            os.makedirs(containing_dir)
+
+        return full_filename
