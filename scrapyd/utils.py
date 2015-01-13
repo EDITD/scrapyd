@@ -9,6 +9,19 @@ from scrapyd.config import Config
 
 def get_spider_queues(config):
     """Return a dict of Spider Quees keyed by project name"""
+    # We need to check whether the --rundir arg exists.
+    # https://github.com/scrapy/scrapyd/issues/70
+    workingdir = os.getcwd()
+    rundir = get_rundir()
+    changed_to_rundir = False
+    if rundir and rundir != workingdir:
+        # Later on the code cds to rundir. But at the moment, we are not
+        # in rundir, so the code to load dbs will run from the wrong
+        # directory. This means that any existing eggs/projects in rundir
+        # won't be read at startup! So we cd to rundir.
+        os.chdir(rundir)
+        changed_to_rundir = True
+
     dbsdir = config.get('dbs_dir', 'dbs')
     if not os.path.exists(dbsdir):
         os.makedirs(dbsdir)
@@ -16,6 +29,13 @@ def get_spider_queues(config):
     for project in get_project_list(config):
         dbpath = os.path.join(dbsdir, '%s.db' % project)
         d[project] = SqliteSpiderQueue(dbpath)
+
+    if changed_to_rundir:
+        # While it would be desirable to stay in rundir, the rest of the
+        # code might rely on not having changed dir to rundir yet.
+        # So to be safe, we restore the original (faulty) workingdir
+        os.chdir(workingdir)
+
     return d
 
 def get_project_list(config):
@@ -65,3 +85,13 @@ def get_spider_list(project, runner=None, pythonpath=None):
         raise RuntimeError(msg.splitlines()[-1])
     return out.splitlines()
 
+
+def get_rundir():
+    """Try to get a value for the --rundir command line argument.
+    """
+    max_value_for_i = len(sys.argv) - 1
+    for i, arg in enumerate(sys.argv):
+        if arg == "--rundir" and i < max_value_for_i:
+            return sys.argv[i + 1]
+
+    return None
