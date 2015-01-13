@@ -93,5 +93,8 @@ def get_rundir():
     for i, arg in enumerate(sys.argv):
         if arg == "--rundir" and i < max_value_for_i:
             return sys.argv[i + 1]
+        if arg.startswith("--rundir="):
+            prefix_len = len("--rundir=")
+            return arg[prefix_len:]
 
     return None
